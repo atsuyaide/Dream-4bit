@@ -117,6 +117,7 @@ def dream_generate_with_visualization(history, max_new_tokens, steps, temperatur
     def generation_func():
         try:
             logger.debug("Starting model generation...")
+            start = time.time()
             output = model.diffusion_generate(
                 input_ids,
                 attention_mask=attention_mask,
@@ -131,7 +132,8 @@ def dream_generate_with_visualization(history, max_new_tokens, steps, temperatur
                 # alg_temp=alg_temp, # 活性化するとエラーが出る
                 generation_tokens_hook_func=my_generation_tokens_hook,
             )
-            logger.debug("Model generation completed successfully.")
+            elapsed_time = time.time() - start
+            logger.info(f"Model generation completed in {elapsed_time:.2f} seconds.")
             output_container["output"] = output
         except Exception as e:
             output_container["error"] = e
@@ -261,7 +263,7 @@ with gr.Blocks(css=css, theme=gr.themes.Soft()) as demo:
 
     with gr.Accordion("Generation Parameters", open=False):
         max_new_tokens_slider = gr.Slider(16, 512, value=128, step=16, label="Max New Tokens")
-        steps_slider = gr.Slider(8, 512, value=128, step=8, label="Diffusion Steps")
+        steps_slider = gr.Slider(1, 512, value=128, step=1, label="Diffusion Steps")
         temperature_slider = gr.Slider(0.0, 2.0, value=0.5, step=0.05, label="Temperature (0 = deterministic)")
         top_p_slider = gr.Slider(0.0, 1.0, value=0.95, step=0.05, label="Top-p (0 = disabled)")
         top_k_slider = gr.Slider(0, 100, value=0, step=1, label="Top-k (0 = disabled)")
