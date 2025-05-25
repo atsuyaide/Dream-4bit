@@ -1,7 +1,12 @@
-# Add at the VERY TOP of the script
+# Reference: https://github.com/atsuyaide/Dream-4bit/blob/main/app.py
+from logging import getLogger, basicConfig
+
+basicConfig(level="INFO")
+logger = getLogger(__name__)
+
 import os
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-print(f"CUDA_LAUNCH_BLOCKING set to: {os.environ.get('CUDA_LAUNCH_BLOCKING')}")  # Verify
+logger.info(f"CUDA_LAUNCH_BLOCKING set to: {os.environ.get('CUDA_LAUNCH_BLOCKING')}")  # Verify
 
 import torch
 import time
@@ -12,27 +17,33 @@ import traceback
 import threading 
 
 # --- Model Loading ---
-model_path = "Dream-org/Dream-v0-Instruct-7B"
+# model_path = "Dream-org/Dream-v0-Instruct-7B-4bit"
+model_path = "Rainnighttram/Dream-v0-Instruct-7B-4bit"
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-print(f"Using device: {device}")
+logger.info(f"Using device: {device}")
 
 try:
-    print("Loading model with bfloat16...")
-    dtype = torch.bfloat16
-    model = AutoModel.from_pretrained(model_path, torch_dtype=dtype, trust_remote_code=True)
-    print(f"Model loaded successfully with {dtype}.")
+    logger.info("Loading model...")
+    model = AutoModel.from_pretrained(
+        model_path,
+        device_map="auto",
+        trust_remote_code=True
+    )
+    # dtype = torch.bfloat16
+    # model = AutoModel.from_pretrained(model_path, torch_dtype=dtype, trust_remote_code=True)
+    logger.info(f"Model loaded successfully with {model_path}.")
 except Exception as e:
-    print(f"Fatal Error loading model: {e}")
-    print(traceback.format_exc())
+    logger.critical(f"Fatal Error loading model: {e}")
+    logger.critical(traceback.format_exc())
     exit()
 
 # --- Tokenizer Loading ---
 try:
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-    print("Tokenizer loaded successfully.")
+    logger.info("Tokenizer loaded successfully.")
 except Exception as e:
-    print(f"Fatal Error loading tokenizer: {e}")
-    print(traceback.format_exc())
+    logger.critical(f"Fatal Error loading tokenizer: {e}")
+    logger.critical(traceback.format_exc())
     exit()
 
 mask_token_id = tokenizer.mask_token_id if tokenizer.mask_token_id is not None else -100
@@ -41,10 +52,10 @@ mask_token_str = "[MASK]"
 # --- Move model to device ---
 try:
     model = model.to(device).eval()
-    print(f"Model moved to {device} and set to eval mode.")
+    logger.info(f"Model moved to {device} and set to eval mode.")
 except Exception as e:
-    print(f"Fatal Error moving model to device: {e}")
-    print(traceback.format_exc())
+    logger.critical(f"Fatal Error moving model to device: {e}")
+    logger.critical(traceback.format_exc())
     exit()
 
 # --- Helper Functions ---
@@ -65,11 +76,12 @@ def add_user_message_to_gradio_history(history, message):
     return history + [[message, None]]
 
 # --- Modified Main Generation Function with Real-Time Visualization ---
-def dream_generate_with_visualization(history, max_new_tokens, steps, temperature, top_p, top_k, delay, alg, alg_temp):
-    print("\n--- Starting dream_generate_with_visualization ---")
-    print(f"Parameters: max_new_tokens={max_new_tokens}, steps={steps}, temperature={temperature}, top_p={top_p}, top_k={top_k}, delay={delay}, alg={alg}, alg_temp={alg_temp}")
+def dream_generate_with_visualization(history, max_new_tokens, steps, temperature, top_p, top_k, delay, alg): #, alg_temp):
+    logger.info("--- Starting dream_generate_with_visualization ---")
+    logger.info(f"Parameters: max_new_tokens={max_new_tokens}, steps={steps}, temperature={temperature}, top_p={top_p}, top_k={top_k}, delay={delay}, alg={alg}") #, alg_temp={alg_temp}")
 
     messages_for_model = format_gradio_history_to_messages(history)
+    logger.info(f"Formatted messages for model: {messages_for_model}")
 
     try:
         inputs = tokenizer.apply_chat_template(
@@ -78,9 +90,9 @@ def dream_generate_with_visualization(history, max_new_tokens, steps, temperatur
         input_ids = inputs.input_ids.to(device)
         attention_mask = inputs.attention_mask.to(device)
         prompt_length = input_ids.shape[1]
-        print(f"Prompt length: {prompt_length}, input_ids device: {input_ids.device}")
+        logger.info(f"Prompt length: {prompt_length}, input_ids device: {input_ids.device}")
     except Exception as e:
-        print(f"Error during input tokenization/processing: {e}")
+        logger.error(f"Error during input tokenization/processing: {e}")
         error_message = f"Input processing error: {e}"
         current_history = copy.deepcopy(history)
         if current_history:
@@ -104,6 +116,7 @@ def dream_generate_with_visualization(history, max_new_tokens, steps, temperatur
 
     def generation_func():
         try:
+            logger.debug("Starting model generation...")
             output = model.diffusion_generate(
                 input_ids,
                 attention_mask=attention_mask,
@@ -115,9 +128,10 @@ def dream_generate_with_visualization(history, max_new_tokens, steps, temperatur
                 top_p=top_p,
                 top_k=effective_top_k,
                 alg=alg,
-                alg_temp=alg_temp,
-                generation_tokens_hook_func=my_generation_tokens_hook
+                # alg_temp=alg_temp, # 活性化するとエラーが出る
+                generation_tokens_hook_func=my_generation_tokens_hook,
             )
+            logger.debug("Model generation completed successfully.")
             output_container["output"] = output
         except Exception as e:
             output_container["error"] = e
@@ -155,7 +169,7 @@ def dream_generate_with_visualization(history, max_new_tokens, steps, temperatur
                         colored_tokens.append((token_str, "#6699CC"))
             previous_tokens = current_tokens
             # update current states
-            intermediate_history[-1][1] = f"⏳ Step {last_yielded}/{current_length - 1}"
+            intermediate_history[-1][1] = f"⏳ Step {last_yielded}/{steps}({last_yielded / steps:.1%})"
             messages_for_chatbot_update = format_gradio_history_to_messages(intermediate_history)
             yield messages_for_chatbot_update, colored_tokens, history
             last_yielded += 1
@@ -176,7 +190,7 @@ def dream_generate_with_visualization(history, max_new_tokens, steps, temperatur
         return
 
     # --- final result processing ---
-    print("Processing final result...")
+    logger.info("Processing final result...")
     try:
         output = output_container["output"]
         final_tokens_tensor = output.sequences[0][prompt_length:]
@@ -191,10 +205,10 @@ def dream_generate_with_visualization(history, max_new_tokens, steps, temperatur
         final_text = tokenizer.decode(final_tokens_list, skip_special_tokens=True, clean_up_tokenization_spaces=True).strip()
         history[-1][1] = final_text
         final_messages_for_chatbot = format_gradio_history_to_messages(history)
-        print("Yielding final result.")
+        logger.info("Yielding final result.")
         yield final_messages_for_chatbot, colored_final, history
     except Exception as e:
-        print(f"Error processing final output: {e}")
+        logger.info(f"Error processing final output: {e}")
         error_message = f"Error processing final output: {e}"
         current_history = copy.deepcopy(history)
         if current_history:
@@ -203,15 +217,15 @@ def dream_generate_with_visualization(history, max_new_tokens, steps, temperatur
             current_history = [["System", f"Error processing output: {error_message}"]]
         yield format_gradio_history_to_messages(current_history), error_message, current_history
 
-    print("--- Exiting dream_generate_with_visualization normally ---")
+    logger.info("--- Exiting dream_generate_with_visualization normally ---")
 
 # --- Bot Response Generator Wrapper ---
-def bot_response_generator(history, max_new_tokens, steps, temperature, top_p, top_k, delay, alg, alg_temp):
+def bot_response_generator(history, max_new_tokens, steps, temperature, top_p, top_k, delay, alg):#, alg_temp):
     if not history or history[-1][1] is not None:
-        print("Skipping bot response: No history or last message already has a response.")
+        logger.info("Skipping bot response: No history or last message already has a response.")
         yield format_gradio_history_to_messages(history), "", history
         return
-    yield from dream_generate_with_visualization(history, max_new_tokens, steps, temperature, top_p, top_k, delay, alg, alg_temp)
+    yield from dream_generate_with_visualization(history, max_new_tokens, steps, temperature, top_p, top_k, delay, alg)#, alg_temp)
 
 # --- User Message Submission Handler ---
 def user_message_submitted(message, history):
@@ -230,14 +244,14 @@ css = """
 
 with gr.Blocks(css=css, theme=gr.themes.Soft()) as demo:
     gr.Markdown("# Dream Diffusion Model Demo (Text-to-Text)")
-    gr.Markdown("Interact with the **Dream-v0-Instruct-7B** model in a multi-turn conversation and watch the diffusion process in real time.")
-    gr.Markdown("Model link: [Dream-org/Dream-v0-Instruct-7B](https://huggingface.co/Dream-org/Dream-v0-Instruct-7B)")
+    gr.Markdown("Interact with the **Dream-v0-Instruct-7B-4bit** model in a multi-turn conversation and watch the diffusion process in real time.")
+    # gr.Markdown("Model link: [Dream-org/Dream-v0-Instruct-7B](https://huggingface.co/Dream-org/Dream-v0-Instruct-7B)")
 
     chat_history_state = gr.State([])
 
     with gr.Row():
         with gr.Column(scale=3):
-            chatbot_display = gr.Chatbot(label="Chat", bubble_full_width=False, height=600, type="messages")
+            chatbot_display = gr.Chatbot(label="Chat", layout="bubble", height=600, type="messages")
             with gr.Group():
                 with gr.Row():
                     user_input_textbox = gr.Textbox(label="Your Message", placeholder="Type your message here...", scale=4, show_label=False, container=False)
@@ -248,12 +262,12 @@ with gr.Blocks(css=css, theme=gr.themes.Soft()) as demo:
     with gr.Accordion("Generation Parameters", open=False):
         max_new_tokens_slider = gr.Slider(16, 512, value=128, step=16, label="Max New Tokens")
         steps_slider = gr.Slider(8, 512, value=128, step=8, label="Diffusion Steps")
-        temperature_slider = gr.Slider(0.0, 1.0, value=0.0, step=0.05, label="Temperature (0 = deterministic)")
+        temperature_slider = gr.Slider(0.0, 2.0, value=0.5, step=0.05, label="Temperature (0 = deterministic)")
         top_p_slider = gr.Slider(0.0, 1.0, value=0.95, step=0.05, label="Top-p (0 = disabled)")
         top_k_slider = gr.Slider(0, 100, value=0, step=1, label="Top-k (0 = disabled)")
         delay_slider = gr.Slider(0.0, 0.5, value=0.02, step=0.01, label="Visualization Delay (seconds)")
         alg_dropdown = gr.Dropdown(choices=["origin", "maskgit_plus", "topk_margin", "entropy"], value="entropy", label="Algorithm (alg)")
-        alg_temp_slider = gr.Slider(0.0, 1.0, value=0.1, step=0.01, label="Algorithm Temperature (alg_temp)")
+        # alg_temp_slider = gr.Slider(0.0, 1.0, value=0.1, step=0.01, label="Algorithm Temperature (alg_temp)")
 
     clear_button = gr.Button("Clear Chat")
 
@@ -267,7 +281,8 @@ with gr.Blocks(css=css, theme=gr.themes.Soft()) as demo:
         queue=False
     )
 
-    generation_params = [max_new_tokens_slider, steps_slider, temperature_slider, top_p_slider, top_k_slider, delay_slider, alg_dropdown, alg_temp_slider]
+    # generation_params = [max_new_tokens_slider, steps_slider, temperature_slider, top_p_slider, top_k_slider, delay_slider, alg_dropdown, alg_temp_slider]
+    generation_params = [max_new_tokens_slider, steps_slider, temperature_slider, top_p_slider, top_k_slider, delay_slider, alg_dropdown]
 
     submit_event_args = dict(
         fn=user_message_submitted,
@@ -290,4 +305,4 @@ with gr.Blocks(css=css, theme=gr.themes.Soft()) as demo:
     send_action.then(**bot_response_event_args)
 
 if __name__ == "__main__":
-    demo.queue(max_size=10, default_concurrency_limit=1).launch(share=True, debug=True)
+    demo.queue(max_size=10, default_concurrency_limit=1).launch(server_name="0.0.0.0", server_port=7860)

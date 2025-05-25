@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  dream7b-4bit:
+    container_name: dream7b-4bit
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dream7b-4bit:cu122
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    shm_size: "8g"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all # 全ての GPU を利用
+    ports:
+      - "7860:7860"
+    volumes:
+      - ~/.cache/huggingface:/home/user/.cache/huggingface
+    user: "${UID:-1000}:${GID:-1000}"  # UID:GID を指定して実行. volumeの権限問題を回避
