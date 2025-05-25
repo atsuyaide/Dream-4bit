@@ -1,6 +1,6 @@
 # Dream 7B (4bit) on Docker
 
-[Dream 7B](https://github.com/HKUNLP/Dream)を4bit量子化した[Dream-v0-Instruct-7B-4bit](https://huggingface.co/Rainnighttram/Dream-7B-bnb-4bit?utm_source=chatgpt.com)をDockerで簡単に動かせるようにしました.
+[Dream 7B](https://github.com/HKUNLP/Dream)を4bit量子化した[Dream-v0-Instruct-7B-4bit](https://huggingface.co/Rainnighttram/Dream-7B-bnb-4bit)をDockerで簡単に動かせるようにしました.
 
 ![demo](./demo.gif)
 
