@@ -2,6 +2,8 @@
 
 [Dream 7B](https://github.com/HKUNLP/Dream)を4bit量子化した[Dream-v0-Instruct-7B-4bit](https://huggingface.co/Rainnighttram/Dream-7B-bnb-4bit?utm_source=chatgpt.com)をDockerで簡単に動かせるようにしました.
 
+![demo](./demo.gif)
+
 `app.py`のほとんどは[生成過程](https://huggingface.co/spaces/multimodalart/Dream)が見れる[本家](https://github.com/atsuyaide/Dream-4bit/blob/main/app.py)のコードを修正したものです.
 変更箇所は`app.py`上でコメントアウトしているので確認できます.
 
@@ -13,7 +15,7 @@
 
 ## 起動方法
 
-1. UID/GIDが1000以外の場合, `.env.template`から`.env`を作り適切に設定してください.
+1. UID/GIDが1000以外の場合, `.env.template`をコピーして`.env`を作り適切に設定してください.
 2. Dockerを使い起動します.
 
 ```shell
